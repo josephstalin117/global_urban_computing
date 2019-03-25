@@ -33,8 +33,10 @@ class Seq2seqConfig():
     experimental_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     csv_file = model_config.csv['raw_file']
-    model_columns =model_config.model_setting['model_columns']
-    n_features = len(model_columns)
+    model_in_columns = model_config.model_setting['model_in_columns']
+    model_out_columns = model_config.model_setting['model_out_columns']
+    n_in_features = len(model_in_columns)
+    n_out_features = len(model_out_columns)
     results_dir = "results"
 
     batch_size = 64
@@ -91,8 +93,6 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
 def load_dataset(csv_file, model_columns, n_in=30, n_out=1):
     dataset = pd.read_csv(csv_file, header=0, index_col=0)
     columns = list(dataset.columns.values)
-    print(columns)
-    print(model_columns)
     for column in columns:
         if column not in model_columns:
             dataset = dataset.drop(columns=column)
@@ -106,31 +106,34 @@ def load_dataset(csv_file, model_columns, n_in=30, n_out=1):
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled = scaler.fit_transform(values)
     # specify the number of lag hours
+    # insert true data
+    # reframed = series_to_supervised(values, n_in, n_out)
     # frame as supervised learning
     reframed = series_to_supervised(scaled, n_in, n_out)
-    print(reframed.shape)
+    print("reframed shape", reframed.shape)
     return reframed, scaler
 
 
 # split into train and test sets
-def split_sets(reframed, n_in, n_out, n_features, test_ratio):
+def split_sets(reframed, n_in, n_out, n_in_features, n_out_features, test_ratio):
     values = reframed.values
     train_size = int(len(values) * (1.0 - test_ratio))
     train = values[:train_size, :]
     test = values[train_size:, :]
     # split into input and outputs
-    n_in_obs = n_in * n_features
+    n_in_obs = n_in * n_in_features
+    n_out_obs = n_out * n_out_features
 
-    train_X, train_y = train[:, :n_in_obs], train[:, :n_out]
-    test_X, test_y = test[:, :n_in_obs], test[:, :n_out]
+    train_X, train_y = train[:, :n_in_obs], train[:, n_in_obs:n_in_obs + n_out_obs]
+    test_X, test_y = test[:, :n_in_obs], test[:, n_in_obs:n_in_obs + n_out_obs]
 
     # reshape input to be 3D [samples, timesteps, features]
-    train_X = train_X.reshape((train_X.shape[0], n_in, n_features))
-    test_X = test_X.reshape((test_X.shape[0], n_in, n_features))
+    train_X = train_X.reshape((train_X.shape[0], n_in, n_in_features))
+    test_X = test_X.reshape((test_X.shape[0], n_in, n_in_features))
 
     # reshape output to be 2D [samples, timesteps]
-    train_y = train_y.reshape((train_y.shape[0], n_out, 1))
-    test_y = test_y.reshape((test_y.shape[0], n_out, 1))
+    train_y = train_y.reshape((train_y.shape[0], n_out, n_out_features))
+    test_y = test_y.reshape((test_y.shape[0], n_out, n_out_features))
     print("train_X shape:", train_X.shape, "train_y shape:", train_y.shape, "test_X shape:", test_X.shape, "test_y shape:", test_y.shape)
     return train_X, train_y, test_X, test_y
 
@@ -145,6 +148,7 @@ def build_model(train_X, train_y, test_X, test_y, lstm_encode_size=200, lstm_dec
     model.add(TimeDistributed(Dense(1)))
     # optimizers
     sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    # todo edit loss
     model.compile(loss='mae', optimizer='adam')
 
     os.environ["CUDA_VISIBLE_DEVICES"] = GPU
@@ -182,11 +186,12 @@ def prediction(model, test_X, test_y, n_out, scaler):
 
 
 def evaluate_forecasts(obs, predictions, out_steps):
+    # todo edit rmse to mae
     total_rmse = sqrt(mean_squared_error(obs, predictions))
     steps_rmse = []
 
     for j in range(out_steps):
-        temp_dict = {'obs':[], 'predictions':[]}
+        temp_dict = {'obs': [], 'predictions': []}
         for i in range(len(obs)):
             temp_dict['obs'].append(obs[i][j])
             temp_dict['predictions'].append(predictions[i][j])
@@ -198,9 +203,9 @@ def evaluate_forecasts(obs, predictions, out_steps):
 if __name__ == '__main__':
     config = Seq2seqConfig()
     print("Default configuration:", config.graph_name)
-    reframed, scaler = load_dataset(config.csv_file, config.n_in, config.n_out, config.model_columns)
-    train_X, train_y, test_X, test_y = split_sets(reframed, config.n_in, config.n_out, config.n_features, config.test_ratio)
-    model , train_loss= build_model(train_X, train_y, test_X, test_y, lstm_encode_size=config.lstm_encode_size, lstm_decode_size=config.lstm_encode_size, full_size=config.full_size, epochs=config.epochs, batch_size=config.batch_size, GPU=config.GPU)
+    reframed, scaler = load_dataset(config.csv_file, config.model_in_columns, config.n_in, config.n_out)
+    train_X, train_y, test_X, test_y = split_sets(reframed, config.n_in, config.n_out, config.n_in_features, config.n_out_features, config.test_ratio)
+    model, train_loss = build_model(train_X, train_y, test_X, test_y, lstm_encode_size=config.lstm_encode_size, lstm_decode_size=config.lstm_encode_size, full_size=config.full_size, epochs=config.epochs, batch_size=config.batch_size, GPU=config.GPU)
     inv_y, inv_yhat = prediction(model, test_X, test_y, config.n_out, scaler)
 
     total_rmse, steps_rmse=evaluate_forecasts(inv_y, inv_yhat, config.n_out)
