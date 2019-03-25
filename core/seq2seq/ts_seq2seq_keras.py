@@ -18,44 +18,45 @@ import sys
 sys.path.append(os.path.abspath('.'))
 sys.path.append(os.path.abspath('..'))
 import getopt
-import water_config
+import core.model_config as model_config
 
 
 class Seq2seqConfig():
     GPU = "1"
-    n_in = water_config.water_setting['n_in']
-    n_out = water_config.water_setting['n_out']
-    n_features = 1
+    n_in = model_config.model_setting['n_in']
+    n_out = model_config.model_setting['n_out']
     lstm_encode_size = 200
     lstm_decode_size = 200
     full_size = 100
     test_ratio = 0.1
-    water_name = water_config.csv['process_name']
+    model_name = model_config.csv['raw_name']
     experimental_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-    csv_file = water_config.csv['process_file']
-    water_columns = ["DO"]
+    csv_file = model_config.csv['raw_file']
+    model_columns =model_config.model_setting['model_columns']
+    n_features = len(model_columns)
     results_dir = "results"
 
     batch_size = 64
-    epochs = water_config.water_setting['epochs']
+    epochs = model_config.model_setting['epochs']
 
-    graph_name = "seq2seq_keras_%s_lstm_en%d_lstm_de%d_nin%d_nout%d_batch%d_epoch%d_time%s" % (water_name, lstm_encode_size, lstm_decode_size, n_in, n_out, batch_size, epochs, experimental_time)
+    graph_name = "seq2seq_keras_%s_lstm_en%d_lstm_de%d_nin%d_nout%d_batch%d_epoch%d_time%s" % (model_name, lstm_encode_size, lstm_decode_size, n_in, n_out, batch_size, epochs, experimental_time)
 
     def __init__(self):
         self.parse_args()
-        self.graph_name = "seq2seq_keras_%s_lstm_en%d_lstm_de%d_nin%d_nout%d_batch%d_epoch%d_time%s" % (self.water_name, self.lstm_encode_size, self.lstm_decode_size, self.n_in, self.n_out, self.batch_size, self.epochs, self.experimental_time)
+        self.graph_name = "seq2seq_keras_%s_lstm_en%d_lstm_de%d_nin%d_nout%d_batch%d_epoch%d_time%s" % (self.model_name, self.lstm_encode_size, self.lstm_decode_size, self.n_in, self.n_out, self.batch_size, self.epochs, self.experimental_time)
 
+    #@todo edit parse args
     def parse_args(self):
         try:
             options, args = getopt.getopt(sys.argv[1:], 'cge:', ['common', 'sg', 'epochs='])
             for opt, value in options:
                 if opt in ('-c', '--common'):
-                    self.water_name = water_config.csv['raw_name']
-                    self.csv_file = water_config.csv['raw_file']
+                    self.model_name = model_config.csv['raw_name']
+                    self.csv_file = model_config.csv['raw_file']
                 if opt in ('-g', '--sg'):
-                    self.water_name = water_config.csv['process_name']
-                    self.csv_file = water_config.csv['process_file']
+                    self.model_name = model_config.csv['process_name']
+                    self.csv_file = model_config.csv['process_file']
                 if opt in ('-e', '--epochs'):
                     self.epochs = int(value)
         except getopt.GetoptError as msg:
@@ -87,11 +88,13 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     return agg
 
 
-def load_dataset(csv_file, n_in=30, n_out=1, water_columns=["CODMn"]):
+def load_dataset(csv_file, model_columns, n_in=30, n_out=1):
     dataset = pd.read_csv(csv_file, header=0, index_col=0)
     columns = list(dataset.columns.values)
+    print(columns)
+    print(model_columns)
     for column in columns:
-        if column not in water_columns:
+        if column not in model_columns:
             dataset = dataset.drop(columns=column)
     values = dataset.values
     # integer encode direction
@@ -195,7 +198,7 @@ def evaluate_forecasts(obs, predictions, out_steps):
 if __name__ == '__main__':
     config = Seq2seqConfig()
     print("Default configuration:", config.graph_name)
-    reframed, scaler = load_dataset(config.csv_file, config.n_in, config.n_out, config.water_columns)
+    reframed, scaler = load_dataset(config.csv_file, config.n_in, config.n_out, config.model_columns)
     train_X, train_y, test_X, test_y = split_sets(reframed, config.n_in, config.n_out, config.n_features, config.test_ratio)
     model , train_loss= build_model(train_X, train_y, test_X, test_y, lstm_encode_size=config.lstm_encode_size, lstm_decode_size=config.lstm_encode_size, full_size=config.full_size, epochs=config.epochs, batch_size=config.batch_size, GPU=config.GPU)
     inv_y, inv_yhat = prediction(model, test_X, test_y, config.n_out, scaler)
