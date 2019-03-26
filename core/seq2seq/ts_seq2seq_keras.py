@@ -145,7 +145,7 @@ def build_model(train_X, train_y, test_X, test_y, lstm_encode_size=200, lstm_dec
     model.add(RepeatVector(n_outputs))
     model.add(LSTM(lstm_decode_size, activation='relu', return_sequences=True))
     model.add(TimeDistributed(Dense(full_size, activation='relu')))
-    model.add(TimeDistributed(Dense(1)))
+    model.add(TimeDistributed(Dense(train_y.shape[2])))
     # optimizers
     sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     # todo edit loss
