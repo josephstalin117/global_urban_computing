@@ -3,6 +3,7 @@ from numpy import concatenate
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
@@ -186,8 +187,8 @@ def prediction(model, test_X, test_y, n_out, scaler):
 
 
 def evaluate_forecasts(obs, predictions, out_steps):
-    # todo edit rmse to mae
-    total_rmse = sqrt(mean_squared_error(obs, predictions))
+    # total_rmse = sqrt(mean_squared_error(obs, predictions))
+    total_rmse = mean_absolute_error(obs, predictions)
     steps_rmse = []
 
     for j in range(out_steps):
