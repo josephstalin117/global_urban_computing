@@ -7,6 +7,7 @@ from sklearn.metrics import mean_absolute_error
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
+from keras import losses
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 from keras.layers import RepeatVector
@@ -150,7 +151,8 @@ def build_model(train_X, train_y, test_X, test_y, lstm_encode_size=200, lstm_dec
     # optimizers
     sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     # todo edit loss
-    model.compile(loss='mae', optimizer='adam')
+    # model.compile(loss='mae', optimizer='adam')
+    model.compile(loss=losses.mae, optimizer='adam')
 
     os.environ["CUDA_VISIBLE_DEVICES"] = GPU
     config = tf.ConfigProto()
@@ -188,17 +190,17 @@ def prediction(model, test_X, test_y, n_out, scaler):
 
 def evaluate_forecasts(obs, predictions, out_steps):
     # total_rmse = sqrt(mean_squared_error(obs, predictions))
-    total_rmse = mean_absolute_error(obs, predictions)
-    steps_rmse = []
+    total_mae = mean_absolute_error(obs, predictions)
+    steps_mae = []
 
     for j in range(out_steps):
         temp_dict = {'obs': [], 'predictions': []}
         for i in range(len(obs)):
             temp_dict['obs'].append(obs[i][j])
             temp_dict['predictions'].append(predictions[i][j])
-        steps_rmse.append(sqrt(mean_squared_error(temp_dict['obs'], temp_dict['predictions'])))
+        steps_mae.append(sqrt(mean_squared_error(temp_dict['obs'], temp_dict['predictions'])))
 
-    return total_rmse, steps_rmse
+    return total_mae, steps_mae
 
 
 if __name__ == '__main__':
@@ -209,12 +211,12 @@ if __name__ == '__main__':
     model, train_loss = build_model(train_X, train_y, test_X, test_y, lstm_encode_size=config.lstm_encode_size, lstm_decode_size=config.lstm_encode_size, full_size=config.full_size, epochs=config.epochs, batch_size=config.batch_size, GPU=config.GPU)
     inv_y, inv_yhat = prediction(model, test_X, test_y, config.n_out, scaler)
 
-    total_rmse, steps_rmse=evaluate_forecasts(inv_y, inv_yhat, config.n_out)
-    print('Test RMSE: %.3f' % total_rmse)
-    print('Test Step RMSE: ', steps_rmse)
+    total_mae, steps_mae=evaluate_forecasts(inv_y, inv_yhat, config.n_out)
+    print('Test RMSE: %.3f' % total_mae)
+    print('Test Step RMSE: ', steps_mae)
 
     # result
-    results = {"test": inv_y.tolist(), "prediction": inv_yhat.tolist(), "train_loss": train_loss, "rmse": total_rmse, "steps_rmse": steps_rmse}
+    results = {"test": inv_y.tolist(), "prediction": inv_yhat.tolist(), "train_loss": train_loss, "mae": total_mae, "steps_mae": steps_mae}
     if not os.path.exists(config.results_dir):
         os.mkdir(config.results_dir)
     with open("results/{}.json".format(config.graph_name), 'w') as fout:
