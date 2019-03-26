@@ -198,7 +198,7 @@ def evaluate_forecasts(obs, predictions, out_steps):
         for i in range(len(obs)):
             temp_dict['obs'].append(obs[i][j])
             temp_dict['predictions'].append(predictions[i][j])
-        steps_mae.append(sqrt(mean_squared_error(temp_dict['obs'], temp_dict['predictions'])))
+        steps_mae.append(sqrt(mean_absolute_error(temp_dict['obs'], temp_dict['predictions'])))
 
     return total_mae, steps_mae
 
