@@ -6,6 +6,8 @@
 # results
 core/seq2seq/results/*
 
+core/results/*
+
 # User-specific stuff
 .idea/**/workspace.xml
 .idea/**/tasks.xml
@@ -162,3 +164,8 @@ venv.bak/
 .mypy_cache/
 
 .idea/
+core/.ipynb_checkpoints/*
+core/nohup.out
+
+urban_data
+urban_data/*
