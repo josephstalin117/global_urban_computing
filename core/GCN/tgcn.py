@@ -20,7 +20,7 @@ time_start = time.time()
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_float('learning_rate', 0.001, 'Initial learning rate.')
-flags.DEFINE_integer('training_epoch', 1, 'Number of epochs to train.')
+flags.DEFINE_integer('training_epoch', 3, 'Number of epochs to train.')
 flags.DEFINE_integer('gru_units', 64, 'hidden units of gru.')
 flags.DEFINE_integer('seq_len', 12, '  time length of inputs.')
 flags.DEFINE_integer('pre_len', 3, 'time length of prediction.')
@@ -32,8 +32,8 @@ flags.DEFINE_string('model_name', 'tgcn', 'tgcn')
 
 # input_data
 def load_sz_data(dataset):
-    sz_adj = pd.read_csv(r'data/sz_adj.csv', header=None)
-    adj = np.mat(sz_adj)
+    metro_adj = pd.read_csv(r'../../urban_data/metro_adj.csv', header=None)
+    adj = np.mat(metro_adj)
     sz_tf = pd.read_csv(r'data/sz_speed.csv')
     return sz_tf, adj
 
@@ -194,10 +194,7 @@ if __name__ == '__main__':
     gru_units = FLAGS.gru_units
 
     ###### load data ######
-    if data_name == 'sz':
-        data, adj = load_sz_data('sz')
-    if data_name == 'los':
-        data, adj = load_los_data('los')
+    data, adj = load_sz_data('sz')
 
     time_len = data.shape[0]
     num_nodes = data.shape[1]
