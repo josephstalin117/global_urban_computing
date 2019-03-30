@@ -31,10 +31,10 @@ flags.DEFINE_string('model_name', 'tgcn', 'tgcn')
 
 
 # input_data
-def load_sz_data(dataset):
+def load_sz_data():
     metro_adj = pd.read_csv(r'../../urban_data/metro_adj.csv', header=None)
     adj = np.mat(metro_adj)
-    sz_tf = pd.read_csv(r'data/sz_speed.csv')
+    sz_tf = pd.read_csv(r'../../urban_data/metro_matrix_in.csv', header=None)
     return sz_tf, adj
 
 
@@ -71,6 +71,7 @@ def normalized_adj(adj):
     return normalized_adj
 
 
+# sparse matrix
 def sparse_to_tuple(mx):
     mx = mx.tocoo()
     coords = np.vstack((mx.row, mx.col)).transpose()
@@ -162,25 +163,6 @@ class tgcnCell(RNNCell):
         return x
 
 
-def TGCN(_X, _weights, _biases):
-    ###
-    cell_1 = tgcnCell(gru_units, adj, num_nodes=num_nodes)
-    cell = tf.nn.rnn_cell.MultiRNNCell([cell_1], state_is_tuple=True)
-    _X = tf.unstack(_X, axis=1)
-    outputs, states = tf.nn.static_rnn(cell, _X, dtype=tf.float32)
-    m = []
-    for i in outputs:
-        o = tf.reshape(i, shape=[-1, num_nodes, gru_units])
-        o = tf.reshape(o, shape=[-1, gru_units])
-        m.append(o)
-    last_output = m[-1]
-    output = tf.matmul(last_output, _weights['out']) + _biases['out']
-    output = tf.reshape(output, shape=[-1, num_nodes, pre_len])
-    output = tf.transpose(output, perm=[0, 2, 1])
-    output = tf.reshape(output, shape=[-1, num_nodes])
-    return output, m, states
-
-
 if __name__ == '__main__':
 
     model_name = FLAGS.model_name
@@ -194,7 +176,7 @@ if __name__ == '__main__':
     gru_units = FLAGS.gru_units
 
     ###### load data ######
-    data, adj = load_sz_data('sz')
+    data, adj = load_sz_data()
 
     time_len = data.shape[0]
     num_nodes = data.shape[1]
@@ -207,6 +189,25 @@ if __name__ == '__main__':
 
     totalbatch = int(trainX.shape[0] / batch_size)
     training_data_count = len(trainX)
+
+
+    def TGCN(_X, _weights, _biases):
+        ###
+        cell_1 = tgcnCell(gru_units, adj, num_nodes=num_nodes)
+        cell = tf.nn.rnn_cell.MultiRNNCell([cell_1], state_is_tuple=True)
+        _X = tf.unstack(_X, axis=1)
+        outputs, states = tf.nn.static_rnn(cell, _X, dtype=tf.float32)
+        m = []
+        for i in outputs:
+            o = tf.reshape(i, shape=[-1, num_nodes, gru_units])
+            o = tf.reshape(o, shape=[-1, gru_units])
+            m.append(o)
+        last_output = m[-1]
+        output = tf.matmul(last_output, _weights['out']) + _biases['out']
+        output = tf.reshape(output, shape=[-1, num_nodes, pre_len])
+        output = tf.transpose(output, perm=[0, 2, 1])
+        output = tf.reshape(output, shape=[-1, num_nodes])
+        return output, m, states
 
     ###### placeholders ######
     inputs = tf.placeholder(tf.float32, shape=[None, seq_len, num_nodes])
@@ -228,6 +229,7 @@ if __name__ == '__main__':
     Lreg = lambda_loss * sum(tf.nn.l2_loss(tf_var) for tf_var in tf.trainable_variables())
     label = tf.reshape(labels, [-1, num_nodes])
     ##loss
+    # todo edit to mae
     loss = tf.reduce_mean(tf.nn.l2_loss(y_pred - label) + Lreg)
     ##rmse
     error = tf.sqrt(tf.reduce_mean(tf.square(y_pred - label)))
