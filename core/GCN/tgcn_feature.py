@@ -6,6 +6,7 @@ import numpy as np
 import math
 import os
 import numpy.linalg as la
+from sklearn.preprocessing import MinMaxScaler
 from tensorflow.contrib.rnn import RNNCell
 import scipy.sparse as sp
 # from gru import GRUCell
@@ -24,7 +25,7 @@ flags.DEFINE_integer('training_epoch', 500, 'Number of epochs to train.')
 flags.DEFINE_integer('gru_units', 256, 'hidden units of gru.')
 flags.DEFINE_integer('seq_len', 144, '  time length of inputs.')
 flags.DEFINE_integer('pre_len', 144, 'time length of prediction.')
-flags.DEFINE_float('train_rate', 0.9, 'rate of training set.')
+flags.DEFINE_float('train_rate', 0.8, 'rate of training set.')
 flags.DEFINE_integer('batch_size', 32, 'batch size.')
 flags.DEFINE_string('dataset', 'los', 'sz or los.')
 flags.DEFINE_string('model_name', 'tgcn', 'tgcn')
@@ -34,7 +35,7 @@ flags.DEFINE_string('model_name', 'tgcn', 'tgcn')
 def load_sz_data():
     metro_adj = pd.read_csv(r'../../urban_data/metro_adj.csv', header=None)
     adj = np.mat(metro_adj)
-    sz_tf = pd.read_csv(r'../../urban_data/metro_matrix_in.csv', header=None)
+    sz_tf = pd.read_csv(r'../../urban_data/metro_matrix_rm512_in.csv', header=None)
     return sz_tf, adj
 
 
@@ -248,9 +249,14 @@ if __name__ == '__main__':
     data1 = np.mat(data, dtype=np.float32)
 
     #### normalization
-    max_value = np.max(data1)
-    data1 = data1 / max_value
+    #max_value = np.max(data1)
+    #data1 = data1 / max_value
+
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    data1 = scaler.fit_transform(data1)
+
     trainX, trainY, testX, testY = preprocess_data(data1, time_len, train_rate, seq_len, pre_len)
+    print("trainX:", trainX.shape, "trainY:", trainY.shape, "testX:", testX.shape, "testY:", testY.shape)
 
     totalbatch = int(trainX.shape[0] / batch_size)
     training_data_count = len(trainX)
@@ -289,14 +295,15 @@ if __name__ == '__main__':
 
     y_pred = pred
 
+
     ###### optimizer ######
     lambda_loss = 0.0015
     Lreg = lambda_loss * sum(tf.nn.l2_loss(tf_var) for tf_var in tf.trainable_variables())
     label = tf.reshape(labels, [-1, num_nodes])
     ##loss
     # todo edit to mae
-    #loss = tf.reduce_mean(tf.nn.l2_loss(y_pred - label) + Lreg)
     loss = tf.reduce_mean(tf.nn.l2_loss(y_pred - label) + Lreg)
+    # loss = tf.metrics.mean_absolute_error(y_pred, label)
     ##rmse
     error = tf.sqrt(tf.reduce_mean(tf.square(y_pred - label)))
     optimizer = tf.train.AdamOptimizer(lr).minimize(loss)
@@ -340,18 +347,27 @@ if __name__ == '__main__':
             _, loss1, rmse1, train_output = sess.run([optimizer, loss, error, y_pred],
                                                      feed_dict={inputs: mini_batch, labels: mini_label})
             batch_loss.append(loss1)
-            batch_rmse.append(rmse1 * max_value)
+            #batch_rmse.append(rmse1 * max_value)
+            batch_rmse.append(rmse1)
+
 
         # Test completely at every epoch
         loss2, rmse2, test_output = sess.run([loss, error, y_pred],
                                              feed_dict={inputs: testX, labels: testY})
         test_label = np.reshape(testY, [-1, num_nodes])
-        rmse, mae, acc, r2_score, var_score = evaluation(test_label, test_output)
-        test_label1 = test_label * max_value
-        test_output1 = test_output * max_value
+        test_label1 = scaler.inverse_transform(test_label)
+        test_output1 = scaler.inverse_transform(test_output)
+        #rmse, mae, acc, r2_score, var_score = evaluation(test_label, test_output)
+        rmse, mae, acc, r2_score, var_score = evaluation(test_label1, test_output1)
+        #test_label1 = test_label * max_value
+        #test_label1 = scaler.inverse_transform(test_label)
+        #test_output1 = test_output * max_value
+        #test_output1 = scaler.inverse_transform(test_output)
         test_loss.append(loss2)
-        test_rmse.append(rmse * max_value)
-        test_mae.append(mae * max_value)
+        #test_rmse.append(rmse * max_value)
+        test_rmse.append(rmse)
+        #test_mae.append(mae * max_value)
+        test_mae.append(mae)
         test_acc.append(acc)
         test_r2.append(r2_score)
         test_var.append(var_score)
@@ -359,7 +375,7 @@ if __name__ == '__main__':
 
         print('Iter:{}'.format(epoch),
               'train_rmse:{:.4}'.format(batch_rmse[-1]),
-              'train_mae:{:.4}'.format(mae * max_value),
+              'test_mae:{:.4}'.format(mae),
               'test_loss:{:.4}'.format(loss2),
               'test_rmse:{:.4}'.format(rmse),
               'test_acc:{:.4}'.format(acc))
@@ -369,6 +385,9 @@ if __name__ == '__main__':
 
     time_end = time.time()
     print(time_end - time_start, 's')
+
+    #prediction
+
 
     ############## visualization ###############
     b = int(len(batch_rmse) / totalbatch)
@@ -389,3 +408,7 @@ if __name__ == '__main__':
           'max_acc:%r' % (test_acc[index]),
           'r2:%r' % (test_r2[index]),
           'var:%r' % test_var[index])
+
+
+
+
